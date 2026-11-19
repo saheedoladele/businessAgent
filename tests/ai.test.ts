@@ -17,3 +17,13 @@ test("parses JSON surrounded by prose", () => {
 test("throws when there is no JSON", () => {
   assert.throws(() => extractJSON("no json here"));
 });
+
+import { resolveApiKey } from "../src/lib/ai";
+
+test("resolveApiKey explains missing or wrong keys", () => {
+  assert.throws(() => resolveApiKey({}), /empty/);
+  assert.throws(() => resolveApiKey({ ANTHROPIC_API_KEY: "sk-ant-oat01-abc" }), /sign-in token/);
+  assert.throws(() => resolveApiKey({ ANTHROPIC_API_KEY: "sk-proj-abc" }), /doesn't look like/);
+  assert.equal(resolveApiKey({ ANTHROPIC_API_KEY: "sk-ant-usr-abc" }), "sk-ant-usr-abc");
+  assert.equal(resolveApiKey({ ANTHROPIC_API_KEY: ' "sk-ant-api03-abc" ' }), "sk-ant-api03-abc");
+});

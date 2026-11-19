@@ -13,10 +13,33 @@ let _client: Anthropic | undefined;
 function client(): Anthropic {
   // Created lazily so importing this module never fails without a key (e.g. in tests).
   _client ??= new Anthropic({
-    apiKey: process.env.ANTHROPIC_API_KEY,
+    apiKey: resolveApiKey(),
     maxRetries: 3, // SDK retries 429 / 5xx with backoff
   });
   return _client;
+}
+
+/**
+ * Read and sanity-check ANTHROPIC_API_KEY so a bad key fails with a clear
+ * message instead of a bare 401 from the API.
+ */
+export function resolveApiKey(env: Record<string, string | undefined> = process.env): string {
+  const key = (env.ANTHROPIC_API_KEY ?? "").trim().replace(/^["']|["']$/g, "");
+  if (!key) {
+    throw new AIError(
+      "ANTHROPIC_API_KEY is empty. Create a key at https://console.anthropic.com/settings/keys and put it in .env",
+    );
+  }
+  if (!key.startsWith("sk-ant-")) {
+    throw new AIError(`ANTHROPIC_API_KEY doesn't look like an Anthropic key (starts with "${key.slice(0, 8)}…").`);
+  }
+  if (key.startsWith("sk-ant-oat")) {
+    throw new AIError(
+      "ANTHROPIC_API_KEY is a Claude.ai / Claude Code sign-in token, which doesn't work with the API. " +
+        "Create an API key in the Claude Console instead.",
+    );
+  }
+  return key;
 }
 
 export const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5-5";

@@ -15,18 +15,23 @@
     "seed": "tsx --env-file=.env scripts/seed-business.ts",
     "discover": "tsx --env-file=.env scripts/discover.ts",
     "enrich": "tsx --env-file=.env scripts/enrich.ts",
-    "draft": "tsx --env-file=.env scripts/draft.ts"
+    "draft": "tsx --env-file=.env scripts/draft.ts",
+    "send": "tsx --env-file=.env scripts/send.ts",
+    "smtp:test": "tsx --env-file=.env scripts/smtp-test.ts",
+    "ai:check": "tsx --env-file=.env scripts/ai-check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.10.0",
     "@prisma/client": "^6.19.3",
     "next": "^15.5.0",
+    "nodemailer": "^10.6.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "zod": "^3.25.76"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
     "prisma": "^6.19.3",
