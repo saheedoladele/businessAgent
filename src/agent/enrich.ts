@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { askJSON } from "@/lib/ai";
+import { askJSON, MODEL_FAST } from "@/lib/ai";
 import { db, logActivity } from "@/lib/db";
 import { domainAcceptsMail, isValidEmailSyntax } from "@/lib/email-check";
 import {
@@ -91,7 +91,7 @@ ${siteText || "(website could not be loaded; judge from the notes only and score
 Scoring guide: 80+ clear need and matches the ideal customer; 60-79 plausible fit;
 below 60 weak fit, wrong industry/size/location, or out of business.
 Only name a contact person who appears on the website text above.`,
-    { shapeHint: SHAPE, maxTokens: 1500, temperature: 0 },
+    { shapeHint: SHAPE, maxTokens: 1500, temperature: 0, model: MODEL_FAST },
   );
 
   const contactName = lead.contactName ?? score.contactName ?? null;

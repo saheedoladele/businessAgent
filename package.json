@@ -18,11 +18,14 @@
     "draft": "tsx --env-file=.env scripts/draft.ts",
     "send": "tsx --env-file=.env scripts/send.ts",
     "smtp:test": "tsx --env-file=.env scripts/smtp-test.ts",
-    "ai:check": "tsx --env-file=.env scripts/ai-check.ts"
+    "ai:check": "tsx --env-file=.env scripts/ai-check.ts",
+    "worker": "tsx --env-file=.env src/worker/index.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.10.0",
     "@prisma/client": "^6.19.3",
+    "bullmq": "^6.7.8",
+    "ioredis": "^6.0.0",
     "next": "^15.5.0",
     "nodemailer": "^10.6.0",
     "react": "^19.1.0",

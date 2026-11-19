@@ -31,6 +31,7 @@ model Business {
   dailySendLimit  Int     @default(30)
   minFitScore     Int     @default(60) // leads scoring below this are disqualified
   followUpDays    Int[]   @default([3, 7, 14]) // days after previous email
+  autoDiscover    Boolean @default(false) // run discovery daily when the pipeline runs low
   active          Boolean @default(true)
 
   createdAt  DateTime    @default(now())

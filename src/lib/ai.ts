@@ -42,9 +42,14 @@ export function resolveApiKey(env: Record<string, string | undefined> = process.
   return key;
 }
 
-export const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-sonnet-5-5";
+/** Main model: web research and writing emails. */
+export const MODEL = process.env.ANTHROPIC_MODEL || "claude-sonnet-5-5";
+/** Cheaper model for simple judgement calls: scoring leads, classifying replies. */
+export const MODEL_FAST = process.env.ANTHROPIC_MODEL_FAST || "claude-haiku-5-5";
 
 export interface AskOptions {
+  /** Defaults to MODEL. Pass MODEL_FAST for cheap classification/scoring. */
+  model?: string;
   system?: string;
   maxTokens?: number;
   temperature?: number;
@@ -74,7 +79,7 @@ async function run(prompt: string, opts: AskOptions = {}): Promise<string> {
 
   for (let i = 0; i <= MAX_CONTINUATIONS; i++) {
     const res = await client().messages.create({
-      model: MODEL,
+      model: opts.model ?? MODEL,
       max_tokens: opts.maxTokens ?? 4096,
       ...(opts.temperature !== undefined ? { temperature: opts.temperature } : {}),
       ...(opts.system ? { system: opts.system } : {}),
