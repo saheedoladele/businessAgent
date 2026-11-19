@@ -1,0 +1,198 @@
+// LeadHunter data model
+// A Business is the user's company. The agent finds Leads for it, talks to them
+// through Messages, and the goal state is a Meeting.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Business {
+  id              String   @id @default(cuid())
+  name            String
+  description     String   @db.Text
+  services        String   @db.Text // what you sell, one per line
+  website         String?
+  idealCustomer   String   @db.Text // who you want to reach (industry, size, pain points)
+  targetLocations String? // e.g. "Lagos, Nigeria; London, UK"
+  bookingUrl      String? // Cal.com / Calendly link sent to interested leads
+
+  // Sender identity + compliance
+  senderName      String
+  senderEmail     String
+  physicalAddress String? // required in cold email footers (CAN-SPAM)
+
+  // Agent behaviour
+  requireApproval Boolean @default(true) // review first emails before they send
+  dailySendLimit  Int     @default(30)
+  followUpDays    Int[]   @default([3, 7, 14]) // days after previous email
+  active          Boolean @default(true)
+
+  createdAt  DateTime    @default(now())
+  updatedAt  DateTime    @updatedAt
+  leads      Lead[]
+  searchRuns SearchRun[]
+  activities Activity[]
+}
+
+/// One execution of the discovery agent (web search for prospects)
+model SearchRun {
+  id         String          @id @default(cuid())
+  businessId String
+  business   Business        @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  query      String?         @db.Text // optional extra instruction from the user
+  status     SearchRunStatus @default(QUEUED)
+  leadsFound Int             @default(0)
+  error      String?         @db.Text
+  createdAt  DateTime        @default(now())
+  finishedAt DateTime?
+
+  @@index([businessId])
+}
+
+enum SearchRunStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+}
+
+model Lead {
+  id          String  @id @default(cuid())
+  businessId  String
+  business    Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  searchRunId String?
+
+  // Company
+  companyName String
+  website     String?
+  domain      String // normalised, used for de-duplication
+  description String? @db.Text
+  location    String?
+  sourceUrl   String? // where the agent found them
+
+  // Contact
+  contactName  String?
+  contactRole  String?
+  email        String?
+  emailValid   Boolean? // domain accepts mail (MX check)
+  phone        String?
+  linkedinUrl  String?
+
+  // Qualification
+  fitScore  Int? // 0-100
+  fitReason String? @db.Text
+
+  // Pipeline
+  status          LeadStatus @default(NEW)
+  sequenceStep    Int        @default(0) // emails sent so far
+  nextActionAt    DateTime? // when the worker should act on this lead next
+  lastContactedAt DateTime?
+  notes           String?    @db.Text
+
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+  messages   Message[]
+  meetings   Meeting[]
+  activities Activity[]
+
+  @@unique([businessId, domain])
+  @@index([status, nextActionAt])
+  @@index([email])
+}
+
+enum LeadStatus {
+  NEW // found, not yet researched
+  QUALIFIED // researched, good fit, has a contact route
+  DISQUALIFIED // poor fit or no way to contact
+  PENDING_APPROVAL // first email drafted, waiting for the user
+  CONTACTED // in the follow-up sequence
+  REPLIED // replied, needs a human look
+  INTERESTED // positive reply, booking link sent
+  MEETING_SCHEDULED // goal reached
+  NOT_INTERESTED
+  UNSUBSCRIBED
+  BOUNCED
+  NO_RESPONSE // sequence finished without a reply
+}
+
+model Message {
+  id        String           @id @default(cuid())
+  leadId    String
+  lead      Lead             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  direction MessageDirection
+  channel   Channel          @default(EMAIL)
+  status    MessageStatus
+  step      Int? // 0 = first email, 1+ = follow-ups
+
+  subject String?
+  body    String  @db.Text
+
+  // Email threading
+  messageId  String? @unique // RFC 5322 Message-ID
+  inReplyTo  String?
+
+  classification String? // AI label for inbound replies
+  error          String? @db.Text
+  sentAt         DateTime?
+  createdAt      DateTime  @default(now())
+
+  @@index([leadId])
+}
+
+enum MessageDirection {
+  OUTBOUND
+  INBOUND
+}
+
+enum Channel {
+  EMAIL
+  PHONE
+}
+
+enum MessageStatus {
+  DRAFT // waiting for approval
+  APPROVED // approved, queued to send
+  SENT
+  FAILED
+  RECEIVED // inbound
+}
+
+model Meeting {
+  id            String    @id @default(cuid())
+  leadId        String
+  lead          Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  provider      String // calcom | calendly | manual
+  externalId    String?   @unique
+  startsAt      DateTime
+  endsAt        DateTime?
+  attendeeEmail String?
+  joinUrl       String?
+  createdAt     DateTime  @default(now())
+}
+
+/// Emails/domains the agent must never contact again (opt-outs, bounces)
+model Suppression {
+  id        String   @id @default(cuid())
+  value     String   @unique // lowercase email or domain
+  reason    String
+  createdAt DateTime @default(now())
+}
+
+/// Human-readable timeline of what the agent did
+model Activity {
+  id         String   @id @default(cuid())
+  businessId String
+  business   Business @relation(fields: [businessId], references: [id], onDelete: Cascade)
+  leadId     String?
+  lead       Lead?    @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  type       String // e.g. lead.found, email.sent, reply.received
+  detail     String   @db.Text
+  createdAt  DateTime @default(now())
+
+  @@index([businessId, createdAt])
+}
