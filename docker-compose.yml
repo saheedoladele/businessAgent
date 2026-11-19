@@ -1,15 +1,20 @@
-# Local Postgres + Redis for development: `docker compose up -d`
+# Local Postgres + Redis for LeadHunter: `docker compose up -d`
+# Host ports are 5433/6380 so they don't clash with other Postgres/Redis
+# containers already using the defaults (5432/6379).
+name: leadhunter
 services:
   postgres:
-    image: postgres:16
+    image: postgres:16.4-alpine
+    container_name: leadhunter-postgres
     environment:
       POSTGRES_USER: leadhunter
       POSTGRES_PASSWORD: leadhunter
       POSTGRES_DB: leadhunter
-    ports: ["5432:5432"]
+    ports: ["5433:5432"]
     volumes: [pgdata:/var/lib/postgresql/data]
   redis:
-    image: redis:7
-    ports: ["6379:6379"]
+    image: redis:7.4-alpine
+    container_name: leadhunter-redis
+    ports: ["6380:6379"]
 volumes:
   pgdata:
