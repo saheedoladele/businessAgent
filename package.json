@@ -14,7 +14,8 @@
     "test": "tsx --test tests/*.test.ts",
     "seed": "tsx --env-file=.env scripts/seed-business.ts",
     "discover": "tsx --env-file=.env scripts/discover.ts",
-    "enrich": "tsx --env-file=.env scripts/enrich.ts"
+    "enrich": "tsx --env-file=.env scripts/enrich.ts",
+    "draft": "tsx --env-file=.env scripts/draft.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.10.0",
