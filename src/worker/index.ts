@@ -94,8 +94,13 @@ async function main() {
   });
 
   worker.on("completed", (job) => {
-    if (job.name === "inbox" && job.returnvalue?.matched) console.log(`✔ inbox: ${job.returnvalue.matched} new replies`);
-    else if (job.name !== "tick" && job.name !== "inbox") console.log(`✔ ${job.name} ${job.id}`);
+    if (job.name === "inbox") {
+      // Each job type returns something different; for inbox it's { checked, matched }.
+      const { matched } = (job.returnvalue ?? {}) as { matched?: number };
+      if (matched) console.log(`✔ inbox: ${matched} new replies`);
+    } else if (job.name !== "tick") {
+      console.log(`✔ ${job.name} ${job.id}`);
+    }
   });
   worker.on("failed", (job, err) => {
     console.error(`✘ ${job?.name} ${job?.id} (attempt ${job?.attemptsMade}): ${err.message}`);
