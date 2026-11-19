@@ -174,7 +174,10 @@ model Meeting {
   endsAt        DateTime?
   attendeeEmail String?
   joinUrl       String?
+  cancelledAt   DateTime?
   createdAt     DateTime  @default(now())
+
+  @@index([leadId])
 }
 
 /// Emails/domains the agent must never contact again (opt-outs, bounces)

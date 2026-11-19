@@ -19,3 +19,26 @@ docker compose up -d        # Postgres + Redis
 npm install
 npm run dev                 # http://localhost:3000
 ```
+
+## Booking webhooks (how the agent knows a meeting is booked)
+
+The webhook must reach your app over the internet. Locally, expose it with a tunnel:
+```bash
+npx cloudflared tunnel --url http://localhost:3000   # or: ngrok http 3000
+```
+Use the printed https URL as `<APP_URL>` below.
+
+**Cal.com** → Settings → Developer → Webhooks → New
+- Subscriber URL: `<APP_URL>/api/webhooks/calcom`
+- Events: Booking created, Booking rescheduled, Booking cancelled
+- Secret: the value of `CALCOM_WEBHOOK_SECRET`
+
+**Calendly** (paid plan) — create a subscription with your personal access token:
+```bash
+curl -X POST https://api.calendly.com/webhook_subscriptions \
+  -H "Authorization: Bearer $CALENDLY_TOKEN" -H "Content-Type: application/json" \
+  -d '{"url":"<APP_URL>/api/webhooks/calendly","events":["invitee.created","invitee.canceled"],
+       "organization":"<your org URI>","scope":"organization","signing_key":"<CALENDLY_WEBHOOK_SIGNING_KEY>"}'
+```
+
+Test without a real booking: `npm run dev`, then `npm run booking:test -- lead@company.com`.
