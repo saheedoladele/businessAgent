@@ -10,6 +10,7 @@ export const QUEUE_NAME = "agent";
 
 export type AgentJob =
   | { name: "tick"; data: Record<string, never> }
+  | { name: "inbox"; data: Record<string, never> }
   | { name: "discover"; data: { searchRunId: string } }
   | { name: "enrich"; data: { leadId: string } }
   | { name: "draft"; data: { leadId: string } }

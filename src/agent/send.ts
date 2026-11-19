@@ -13,11 +13,16 @@ export type SendResult =
   | { ok: true }
   | { ok: false; reason: "limit" | "skipped" | "bounced" | "failed"; detail: string };
 
-/** Lead states where we must not send anything else. */
-const STOP_STATUSES = new Set([
+/** Lead states where no more sequence emails (step 0, 1, 2...) may go out. */
+const STOP_SEQUENCE = new Set([
   "DISQUALIFIED", "REPLIED", "INTERESTED", "MEETING_SCHEDULED",
   "NOT_INTERESTED", "UNSUBSCRIBED", "BOUNCED", "NO_RESPONSE",
 ]);
+/** Conversation replies (step = null) are still allowed to people who replied. */
+const STOP_REPLIES = new Set(["DISQUALIFIED", "NOT_INTERESTED", "UNSUBSCRIBED", "BOUNCED"]);
+
+/** Days to wait before nudging an interested lead who hasn't booked. */
+export const NUDGE_AFTER_DAYS = 3;
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -44,10 +49,12 @@ export async function sendMessage(messageId: string): Promise<SendResult> {
   };
 
   if (msg.status !== "APPROVED") return { ok: false, reason: "skipped", detail: `message is ${msg.status}` };
-  if (STOP_STATUSES.has(lead.status)) return skip(`lead is ${lead.status}`);
+  const isReply = msg.step === null;
+  if ((isReply ? STOP_REPLIES : STOP_SEQUENCE).has(lead.status)) return skip(`lead is ${lead.status}`);
   if (!lead.email) return skip("lead has no email");
   if (await isSuppressed(lead.email)) return skip("email is on the do-not-contact list");
-  if ((await sentToday(b.id)) >= b.dailySendLimit) {
+  // Replies to people who answered skip the daily cap: they are wanted, not cold.
+  if (!isReply && (await sentToday(b.id)) >= b.dailySendLimit) {
     return { ok: false, reason: "limit", detail: `daily limit of ${b.dailySendLimit} reached` };
   }
 
@@ -88,15 +95,28 @@ export async function sendMessage(messageId: string): Promise<SendResult> {
     return { ok: false, reason: "failed", detail };
   }
 
-  const step = msg.step ?? 0;
   const now = new Date();
-  // Wait N days before the next step; after the last step, wait 7 days for a late reply.
-  const waitDays = b.followUpDays[step] ?? 7;
-
   await db.message.update({
     where: { id: msg.id },
     data: { status: "SENT", sentAt: now, messageId: newMessageId, error: null },
   });
+
+  if (isReply) {
+    // Conversation reply: keep the lead's status; nudge interested leads later if they don't book.
+    await db.lead.update({
+      where: { id: lead.id },
+      data: {
+        lastContactedAt: now,
+        ...(lead.status === "INTERESTED" ? { nextActionAt: new Date(now.getTime() + NUDGE_AFTER_DAYS * DAY) } : {}),
+      },
+    });
+    await logActivity(b.id, "email.sent", `Replied to ${lead.companyName} <${lead.email}>`, lead.id);
+    return { ok: true };
+  }
+
+  const step = msg.step ?? 0;
+  // Wait N days before the next step; after the last step, wait 7 days for a late reply.
+  const waitDays = b.followUpDays[step] ?? 7;
   await db.lead.update({
     where: { id: lead.id },
     data: {

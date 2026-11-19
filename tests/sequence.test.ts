@@ -22,10 +22,18 @@ test("finishes after the last follow-up", () => {
   assert.equal(nextSequenceAction({ status: "CONTACTED", sequenceStep: 4, nextActionAt: past }, days, now), "finish");
 });
 
-test("never acts on leads that replied or opted out", () => {
-  for (const status of ["REPLIED", "INTERESTED", "UNSUBSCRIBED", "MEETING_SCHEDULED"]) {
+test("never acts on leads that replied, declined or opted out", () => {
+  for (const status of ["REPLIED", "NOT_INTERESTED", "UNSUBSCRIBED", "MEETING_SCHEDULED"]) {
     assert.equal(nextSequenceAction({ status, sequenceStep: 1, nextActionAt: past }, days, now), "wait");
   }
+});
+
+test("nudges interested leads to book, then hands over to you", () => {
+  const lead = { status: "INTERESTED", sequenceStep: 1, nextActionAt: past };
+  assert.equal(nextSequenceAction(lead, days, now, 0), "nudge");
+  assert.equal(nextSequenceAction(lead, days, now, 1), "nudge");
+  assert.equal(nextSequenceAction(lead, days, now, 2), "stop-nudging");
+  assert.equal(nextSequenceAction({ ...lead, nextActionAt: future }, days, now, 0), "wait");
 });
 
 test("send window respects timezone and weekends", () => {

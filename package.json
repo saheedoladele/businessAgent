@@ -19,13 +19,16 @@
     "send": "tsx --env-file=.env scripts/send.ts",
     "smtp:test": "tsx --env-file=.env scripts/smtp-test.ts",
     "ai:check": "tsx --env-file=.env scripts/ai-check.ts",
-    "worker": "tsx --env-file=.env src/worker/index.ts"
+    "worker": "tsx --env-file=.env src/worker/index.ts",
+    "inbox": "tsx --env-file=.env scripts/inbox.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.10.0",
     "@prisma/client": "^6.19.3",
     "bullmq": "^6.7.8",
+    "imapflow": "^2.12.1",
     "ioredis": "^6.0.0",
+    "mailparser": "^3.14.5",
     "next": "^15.5.0",
     "nodemailer": "^10.6.0",
     "react": "^19.1.0",
@@ -33,6 +36,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
+    "@types/mailparser": "^3.9.0",
     "@types/node": "^22.0.0",
     "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.1.0",

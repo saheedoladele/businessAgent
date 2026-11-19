@@ -1,6 +1,7 @@
 import { Worker, type Job } from "bullmq";
 import { runDiscovery, createSearchRun } from "@/agent/discover";
 import { enrichLead } from "@/agent/enrich";
+import { processInbox } from "@/agent/inbox";
 import { sendApproved } from "@/agent/send";
 import { advanceLead, dueLeads } from "@/agent/sequence";
 import { draftFirstEmail } from "@/agent/write-email";
@@ -12,11 +13,13 @@ import { isWithinSendWindow } from "@/lib/send-window";
  * The agent's engine. Every few minutes a "tick" looks at each active
  * business and queues whatever is due:
  *   NEW leads → enrich → QUALIFIED → draft → (approve) → send → follow-ups
+ * and every couple of minutes an "inbox" job handles replies.
  * Each step runs as its own job, so one failure never blocks the rest
  * and failed jobs retry with backoff.
  */
 
 const TICK_EVERY_MS = Number(process.env.TICK_EVERY_MINUTES || 5) * 60_000;
+const INBOX_EVERY_MS = Number(process.env.INBOX_EVERY_MINUTES || 2) * 60_000;
 const DAY = 24 * 60 * 60 * 1000;
 
 async function tick() {
@@ -63,6 +66,8 @@ async function handle(job: Job) {
   switch (job.name) {
     case "tick":
       return tick();
+    case "inbox":
+      return processInbox();
     case "discover":
       return runDiscovery(job.data.searchRunId);
     case "enrich":
@@ -81,6 +86,7 @@ async function handle(job: Job) {
 async function main() {
   // Repeating tick (upsert = safe to call on every start).
   await agentQueue().upsertJobScheduler("tick", { every: TICK_EVERY_MS }, { name: "tick", data: {} });
+  await agentQueue().upsertJobScheduler("inbox", { every: INBOX_EVERY_MS }, { name: "inbox", data: {} });
 
   const worker = new Worker(QUEUE_NAME, handle, {
     connection: redisConnection(),
@@ -88,13 +94,16 @@ async function main() {
   });
 
   worker.on("completed", (job) => {
-    if (job.name !== "tick") console.log(`✔ ${job.name} ${job.id}`);
+    if (job.name === "inbox" && job.returnvalue?.matched) console.log(`✔ inbox: ${job.returnvalue.matched} new replies`);
+    else if (job.name !== "tick" && job.name !== "inbox") console.log(`✔ ${job.name} ${job.id}`);
   });
   worker.on("failed", (job, err) => {
     console.error(`✘ ${job?.name} ${job?.id} (attempt ${job?.attemptsMade}): ${err.message}`);
   });
 
-  console.log(`LeadHunter worker running. Tick every ${TICK_EVERY_MS / 60_000} min. Ctrl+C to stop.`);
+  console.log(
+    `LeadHunter worker running. Pipeline every ${TICK_EVERY_MS / 60_000} min, inbox every ${INBOX_EVERY_MS / 60_000} min. Ctrl+C to stop.`,
+  );
 
   const shutdown = async () => {
     console.log("Shutting down (finishing current jobs)...");

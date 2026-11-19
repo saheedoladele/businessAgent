@@ -1,5 +1,6 @@
 import { db, logActivity } from "@/lib/db";
 import { nextSequenceAction } from "@/lib/sequence-rules";
+import { writeReply } from "./reply";
 import { writeEmail } from "./write-email";
 
 /**
@@ -11,19 +12,27 @@ import { writeEmail } from "./write-email";
 /** Leads whose next step is due, across all active businesses. */
 export async function dueLeads(now = new Date()) {
   return db.lead.findMany({
-    where: { status: "CONTACTED", nextActionAt: { lte: now }, business: { active: true } },
+    where: { status: { in: ["CONTACTED", "INTERESTED"] }, nextActionAt: { lte: now }, business: { active: true } },
     select: { id: true },
     take: 200,
   });
 }
 
-/**
- * Act on one due lead. Follow-ups are approved automatically: you approved
- * the first email and the sequence, so we don't ask again each time.
- */
+/** Act on one due lead: next follow-up, end of sequence, or a booking reminder. */
 export async function advanceLead(leadId: string) {
   const lead = await db.lead.findUniqueOrThrow({ where: { id: leadId }, include: { business: true } });
-  const action = nextSequenceAction(lead, lead.business.followUpDays);
+  // Booking reminders already sent = our replies after their last inbound message.
+  const lastInbound = await db.message.findFirst({
+    where: { leadId, direction: "INBOUND" },
+    orderBy: { createdAt: "desc" },
+  });
+  const nudgesSent = lastInbound
+    ? await db.message.count({
+        where: { leadId, direction: "OUTBOUND", step: null, status: "SENT", createdAt: { gt: lastInbound.createdAt } },
+      }) - 1 // the first one is the booking reply itself
+    : 0;
+
+  const action = nextSequenceAction(lead, lead.business.followUpDays, new Date(), Math.max(0, nudgesSent));
   if (action === "wait") return action;
 
   if (action === "finish") {
@@ -32,6 +41,29 @@ export async function advanceLead(leadId: string) {
     return action;
   }
 
+  if (action === "stop-nudging") {
+    await db.lead.update({ where: { id: lead.id }, data: { nextActionAt: null } });
+    await logActivity(
+      lead.businessId,
+      "lead.needs_you",
+      `${lead.companyName} was interested but hasn't booked after reminders. Worth a personal message or call.`,
+      lead.id,
+    );
+    return action;
+  }
+
+  if (action === "nudge") {
+    const reply = await writeReply(leadId, "NUDGE");
+    await db.message.create({
+      data: { leadId, direction: "OUTBOUND", channel: "EMAIL", status: "APPROVED", step: null, ...reply },
+    });
+    await db.lead.update({ where: { id: lead.id }, data: { nextActionAt: null } });
+    await logActivity(lead.businessId, "email.drafted", `Wrote booking reminder for ${lead.companyName}`, lead.id);
+    return action;
+  }
+
+  // Follow-ups are approved automatically: you approved the first email and
+  // the sequence, so we don't ask again each time.
   const step = lead.sequenceStep; // e.g. 1 email sent → write follow-up step 1
   const exists = await db.message.findFirst({ where: { leadId, step, direction: "OUTBOUND" } });
   if (!exists) {

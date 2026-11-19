@@ -145,14 +145,20 @@ export async function approveDraft(messageId: string, edits?: Partial<DraftEmail
     data: { status: "APPROVED", ...(edits?.subject ? { subject: edits.subject } : {}), ...(edits?.body ? { body: edits.body } : {}) },
     include: { lead: true },
   });
-  await db.lead.update({ where: { id: msg.leadId }, data: { status: "QUALIFIED" } });
+  // First emails return the lead to QUALIFIED (ready to send); replies keep the lead's status.
+  if (msg.step === 0) await db.lead.update({ where: { id: msg.leadId }, data: { status: "QUALIFIED" } });
   await logActivity(msg.lead.businessId, "email.approved", `Approved email to ${msg.lead.companyName}`, msg.leadId);
   return msg;
 }
 
-/** Reject a draft: delete it and drop the lead from outreach. */
+/** Reject a draft. For a first email this drops the lead from outreach. */
 export async function rejectDraft(messageId: string, reason = "Rejected by user") {
   const msg = await db.message.delete({ where: { id: messageId }, include: { lead: true } });
+  if (msg.step !== 0) {
+    // Rejecting a reply/follow-up just discards it; you'll answer yourself.
+    await logActivity(msg.lead.businessId, "email.rejected", `Discarded draft to ${msg.lead.companyName}`, msg.leadId);
+    return;
+  }
   await db.lead.update({
     where: { id: msg.leadId },
     data: { status: "DISQUALIFIED", notes: [msg.lead.notes, `Disqualified: ${reason}`].filter(Boolean).join("\n") },
