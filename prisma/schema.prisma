@@ -29,6 +29,7 @@ model Business {
   // Agent behaviour
   requireApproval Boolean @default(true) // review first emails before they send
   dailySendLimit  Int     @default(30)
+  minFitScore     Int     @default(60) // leads scoring below this are disqualified
   followUpDays    Int[]   @default([3, 7, 14]) // days after previous email
   active          Boolean @default(true)
 
