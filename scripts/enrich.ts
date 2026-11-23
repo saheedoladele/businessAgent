@@ -15,7 +15,7 @@ async function main() {
     try {
       const r = await enrichLead(lead.id);
       const fresh = await db.lead.findUniqueOrThrow({ where: { id: lead.id } });
-      console.log(`${r.status === "QUALIFIED" ? "✔" : "✘"} ${lead.companyName} [${fresh.fitScore}] ${fresh.email ?? ""}\n  ${r.reason}`);
+      console.log(`${r.status === "QUALIFIED" ? "✔" : r.status === "NEEDS_CALL" ? "☎" : "✘"} ${lead.companyName} [${fresh.fitScore}] ${fresh.email ?? ""}\n  ${r.reason}`);
     } catch (e) {
       console.log(`! ${lead.companyName}: ${(e as Error).message}`);
     }

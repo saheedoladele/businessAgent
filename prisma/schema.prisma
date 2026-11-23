@@ -82,6 +82,7 @@ model Lead {
   contactRole  String?
   email        String?
   emailValid   Boolean? // domain accepts mail (MX check)
+  emailSource  String? // "website", "hunter.io" or the URL it was found on
   phone        String?
   linkedinUrl  String?
 
@@ -111,6 +112,7 @@ enum LeadStatus {
   NEW // found, not yet researched
   QUALIFIED // researched, good fit, has a contact route
   DISQUALIFIED // poor fit or no way to contact
+  NEEDS_CALL // good fit but no email: reachable by phone/WhatsApp only
   PENDING_APPROVAL // first email drafted, waiting for the user
   CONTACTED // in the follow-up sequence
   REPLIED // replied, needs a human look

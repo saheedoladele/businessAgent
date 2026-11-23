@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { askJSON, MODEL_FAST } from "@/lib/ai";
 import { db, logActivity } from "@/lib/db";
+import { findEmailOffSite } from "./find-email";
 import { domainAcceptsMail, isValidEmailSyntax } from "@/lib/email-check";
 import {
   extractEmails,
@@ -13,8 +14,10 @@ import {
 
 /**
  * Enrichment step: read the lead's website, collect public contact details,
- * and let Claude score how well they fit. Moves the lead from NEW to
- * QUALIFIED (ready for outreach) or DISQUALIFIED (with the reason in notes).
+ * and let Claude score how well they fit. If the site has no email, look
+ * elsewhere (Hunter.io, web search). Moves the lead from NEW to
+ * QUALIFIED (ready for email), NEEDS_CALL (good fit, phone only) or
+ * DISQUALIFIED (with the reason in notes).
  */
 
 const TEXT_PER_PAGE = 4000;
@@ -38,7 +41,7 @@ const SHAPE = `{
 }`;
 
 export interface EnrichResult {
-  status: "QUALIFIED" | "DISQUALIFIED";
+  status: "QUALIFIED" | "DISQUALIFIED" | "NEEDS_CALL";
   reason: string;
 }
 
@@ -94,8 +97,8 @@ Only name a contact person who appears on the website text above.`,
     { shapeHint: SHAPE, maxTokens: 1500, temperature: 0, model: MODEL_FAST },
   );
 
-  const contactName = lead.contactName ?? score.contactName ?? null;
-  const contactRole = lead.contactRole ?? score.contactRole ?? null;
+  let contactName = lead.contactName ?? score.contactName ?? null;
+  let contactRole = lead.contactRole ?? score.contactRole ?? null;
 
   // 4. Choose an email and make sure its domain can receive mail.
   const candidates = [...emails].filter(isValidEmailSyntax);
@@ -108,9 +111,27 @@ Only name a contact person who appears on the website text above.`,
 
   let email = pickBestEmail(usable, lead.domain, contactName);
   let emailValid: boolean | null = null;
+  let emailSource: string | null = email ? "website" : null;
   if (email) {
     emailValid = await domainAcceptsMail(email);
     if (!emailValid) email = null;
+  }
+
+  // 4b. Website had no usable email: look elsewhere, but only for good-fit leads
+  //     (the extra web searches cost money).
+  if (!email && !blocked.has(lead.domain) && score.fitScore >= b.minFitScore) {
+    const found = await findEmailOffSite({ ...lead, contactName });
+    found.phones.forEach((p) => phones.add(p));
+    if (found.email && isValidEmailSyntax(found.email) && !blocked.has(found.email)) {
+      const ok = await domainAcceptsMail(found.email);
+      if (ok) {
+        email = found.email;
+        emailValid = true;
+        emailSource = found.source;
+        contactName ??= found.contactName ?? null;
+        contactRole ??= found.contactRole ?? null;
+      }
+    }
   }
 
   // 5. Decide.
@@ -122,17 +143,20 @@ Only name a contact person who appears on the website text above.`,
   } else if (score.fitScore < b.minFitScore) {
     status = "DISQUALIFIED";
     reason = `Fit score ${score.fitScore} below ${b.minFitScore}: ${score.fitReason}`;
+  } else if (!email && phones.size) {
+    // Good fit, reachable by phone/WhatsApp only: keep them for a call task.
+    status = "NEEDS_CALL";
+    reason = `Good fit (score ${score.fitScore}) but no email found; reachable by phone`;
   } else if (!email) {
     status = "DISQUALIFIED";
-    reason = phones.size
-      ? "No usable email found (phone available for manual follow-up)"
-      : "No public contact details found";
+    reason = "No public contact details found";
   }
 
   const notes = [
     score.summary,
     score.painPoints.length ? `Pain points: ${score.painPoints.join("; ")}` : "",
     status === "DISQUALIFIED" ? `Disqualified: ${reason}` : "",
+    emailSource && emailSource !== "website" ? `Email found via: ${emailSource}` : "",
     emails.size > 1 ? `Other emails: ${[...emails].filter((e) => e !== email).join(", ")}` : "",
   ]
     .filter(Boolean)
@@ -144,6 +168,7 @@ Only name a contact person who appears on the website text above.`,
       status,
       email,
       emailValid,
+      emailSource,
       phone: lead.phone ?? [...phones][0] ?? null,
       contactName,
       contactRole,
@@ -156,8 +181,8 @@ Only name a contact person who appears on the website text above.`,
 
   await logActivity(
     b.id,
-    status === "QUALIFIED" ? "lead.qualified" : "lead.disqualified",
-    `${lead.companyName}: ${status === "QUALIFIED" ? `score ${score.fitScore}, ${email}` : reason}`,
+    status === "QUALIFIED" ? "lead.qualified" : status === "NEEDS_CALL" ? "lead.needs_call" : "lead.disqualified",
+    `${lead.companyName}: ${status === "QUALIFIED" ? `score ${score.fitScore}, ${email}${emailSource !== "website" ? ` (via ${emailSource})` : ""}` : reason}`,
     lead.id,
   );
   return { status, reason };
