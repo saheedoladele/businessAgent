@@ -1,5 +1,6 @@
 import { Worker, type Job } from "bullmq";
 import { runDiscovery, createSearchRun } from "@/agent/discover";
+import { createCallTask } from "@/agent/calls";
 import { enrichLead } from "@/agent/enrich";
 import { processInbox } from "@/agent/inbox";
 import { sendApproved } from "@/agent/send";
@@ -58,7 +59,15 @@ async function tick() {
     }
   }
 
-  // 5. Follow-ups that are due (any business).
+  // 5. Phone-only leads get a call task (script + WhatsApp message) once.
+  const phoneOnly = await db.lead.findMany({
+    where: { status: "NEEDS_CALL", business: { active: true }, callTasks: { none: {} } },
+    select: { id: true },
+    take: 50,
+  });
+  for (const l of phoneOnly) await enqueue("call-task", { leadId: l.id, reason: "NO_EMAIL" }, `call-${l.id}`);
+
+  // 6. Follow-ups that are due (any business).
   for (const l of await dueLeads()) await enqueue("follow-up", { leadId: l.id }, `follow-up-${l.id}`);
 }
 
@@ -78,6 +87,8 @@ async function handle(job: Job) {
       return sendApproved(job.data.businessId);
     case "follow-up":
       return advanceLead(job.data.leadId);
+    case "call-task":
+      return createCallTask(job.data.leadId, job.data.reason);
     default:
       throw new Error(`Unknown job: ${job.name}`);
   }

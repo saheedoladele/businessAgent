@@ -21,7 +21,10 @@
     "ai:check": "tsx --env-file=.env scripts/ai-check.ts",
     "worker": "tsx --env-file=.env src/worker/index.ts",
     "inbox": "tsx --env-file=.env scripts/inbox.ts",
-    "booking:test": "tsx --env-file=.env scripts/simulate-booking.ts"
+    "booking:test": "tsx --env-file=.env scripts/simulate-booking.ts",
+    "calls": "tsx --env-file=.env scripts/calls.ts",
+    "call:done": "tsx --env-file=.env scripts/call-done.ts",
+    "call:create": "tsx --env-file=.env scripts/call-create.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.10.0",

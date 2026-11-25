@@ -15,7 +15,8 @@ export type AgentJob =
   | { name: "enrich"; data: { leadId: string } }
   | { name: "draft"; data: { leadId: string } }
   | { name: "send-batch"; data: { businessId: string } }
-  | { name: "follow-up"; data: { leadId: string } };
+  | { name: "follow-up"; data: { leadId: string } }
+  | { name: "call-task"; data: { leadId: string; reason: "NO_EMAIL" | "NOT_BOOKED" | "MANUAL" } };
 
 export function redisConnection(): Redis {
   // BullMQ requires maxRetriesPerRequest: null for blocking commands.

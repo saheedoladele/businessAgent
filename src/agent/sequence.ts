@@ -1,4 +1,5 @@
 import { db, logActivity } from "@/lib/db";
+import { enqueue } from "@/lib/queue";
 import { nextSequenceAction } from "@/lib/sequence-rules";
 import { writeReply } from "./reply";
 import { writeEmail } from "./write-email";
@@ -49,6 +50,8 @@ export async function advanceLead(leadId: string) {
       `${lead.companyName} was interested but hasn't booked after reminders. Worth a personal message or call.`,
       lead.id,
     );
+    // A call usually closes these: queue a call task if we have a number.
+    if (lead.phone) await enqueue("call-task", { leadId: lead.id, reason: "NOT_BOOKED" }, `call-${lead.id}`);
     return action;
   }
 

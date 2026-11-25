@@ -102,6 +102,7 @@ model Lead {
   messages   Message[]
   meetings   Meeting[]
   activities Activity[]
+  callTasks  CallTask[]
 
   @@unique([businessId, domain])
   @@index([status, nextActionAt])
@@ -180,6 +181,43 @@ model Meeting {
   createdAt     DateTime  @default(now())
 
   @@index([leadId])
+}
+
+/// A phone call (or WhatsApp message) the agent wants made, with a script.
+/// Made by you by default; optionally by an AI voice provider (Vapi).
+model CallTask {
+  id             String         @id @default(cuid())
+  leadId         String
+  lead           Lead           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  reason         CallReason
+  status         CallTaskStatus @default(OPEN)
+  phone          String // E.164, e.g. +2348031234567
+  script         String         @db.Text
+  whatsappText   String         @db.Text
+  attempts       Int            @default(0)
+  outcome        String? // BOOKED | INTERESTED | CALLBACK | NOT_INTERESTED | NO_ANSWER | WRONG_NUMBER
+  notes          String?        @db.Text
+  provider       String         @default("manual") // manual | vapi
+  externalCallId String?
+  dueAt          DateTime       @default(now())
+  completedAt    DateTime?
+  createdAt      DateTime       @default(now())
+
+  @@index([status, dueAt])
+  @@index([leadId])
+}
+
+enum CallReason {
+  NO_EMAIL // good fit but phone is the only contact route
+  NOT_BOOKED // said yes by email but never booked after reminders
+  MANUAL // you asked for a call
+}
+
+enum CallTaskStatus {
+  OPEN
+  CALLING // AI provider call in progress
+  DONE
+  SKIPPED
 }
 
 /// Emails/domains the agent must never contact again (opt-outs, bounces)
