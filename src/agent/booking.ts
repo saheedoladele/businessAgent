@@ -46,7 +46,7 @@ export async function recordBooking(ev: BookingEvent): Promise<{ matched: boolea
     await logActivity(
       lead.businessId,
       "meeting.booked",
-      `📅 ${lead.companyName} booked a meeting for ${ev.startsAt.toUTCString()}${ev.attendeeName ? ` with ${ev.attendeeName}` : ""}`,
+      `${lead.companyName} booked a meeting for ${ev.startsAt.toLocaleString("en-GB", { weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: process.env.SEND_TIMEZONE || "UTC" })}${ev.attendeeName ? ` with ${ev.attendeeName}` : ""}`,
       lead.id,
     );
     return { matched: true, leadId: lead.id };

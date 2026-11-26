@@ -1,19 +1,23 @@
-import { Flash } from "@/components/ui";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import { createBusiness } from "../actions";
 import { BusinessForm } from "../business-form";
 
-export default async function NewBusinessPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
-  const { error } = await searchParams;
+export const metadata = { title: "Set up a business" };
+
+export default function NewBusinessPage() {
   return (
     <div>
-      <div className="page-head">
+      <Link href="/businesses" className="back">
+        <ArrowLeft size={14} aria-hidden /> Businesses
+      </Link>
+      <header className="page-head">
         <div>
           <h1>Set up a business</h1>
-          <p className="muted">Tell the agent what you sell and who to find. You can change any of this later.</p>
+          <p className="lede">Tell the agent what you sell and who to look for. You can change any of this later.</p>
         </div>
-      </div>
-      <Flash error={error} />
-      <BusinessForm action={createBusiness} submitLabel="Create business" />
+      </header>
+      <BusinessForm action={createBusiness} submitLabel="Create business" pendingLabel="Creating…" />
     </div>
   );
 }

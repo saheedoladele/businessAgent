@@ -1,101 +1,102 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Badge, Flash, Stat, timeAgo } from "@/components/ui";
+import { ArrowLeft, Pause, Play, Search } from "lucide-react";
+import { LiveRefresh } from "@/components/live-refresh";
+import { PipelineTrail } from "@/components/pipeline-trail";
+import { SubmitButton } from "@/components/submit-button";
+import { Badge, Time } from "@/components/ui";
 import { db } from "@/lib/db";
 import { runDiscovery, toggleActive, updateBusiness } from "../actions";
 import { BusinessForm } from "../business-form";
 
-export default async function BusinessPage({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ id: string }>;
-  searchParams: Promise<{ error?: string; notice?: string }>;
-}) {
+export async function generateMetadata({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { error, notice } = await searchParams;
+  const b = await db.business.findUnique({ where: { id }, select: { name: true } });
+  return { title: b?.name ?? "Business" };
+}
+
+export default async function BusinessPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
   const business = await db.business.findUnique({ where: { id } });
   if (!business) notFound();
 
-  const [counts, runs] = await Promise.all([
+  const [byStatus, runs] = await Promise.all([
     db.lead.groupBy({ by: ["status"], where: { businessId: id }, _count: true }),
-    db.searchRun.findMany({ where: { businessId: id }, orderBy: { createdAt: "desc" }, take: 8 }),
+    db.searchRun.findMany({ where: { businessId: id }, orderBy: { createdAt: "desc" }, take: 6 }),
   ]);
-  const count = (...statuses: string[]) =>
-    counts.filter((c) => statuses.includes(c.status)).reduce((sum, c) => sum + c._count, 0);
-  const total = counts.reduce((sum, c) => sum + c._count, 0);
+  const counts = Object.fromEntries(byStatus.map((c) => [c.status, c._count]));
+  const searching = runs.some((r) => r.status === "QUEUED" || r.status === "RUNNING");
 
   return (
     <div className="stack">
-      <div className="page-head">
-        <div>
-          <h1>{business.name}</h1>
-          <p className="muted">
-            Agent is <strong>{business.active ? "running" : "paused"}</strong> · sending as {business.senderName} &lt;
-            {business.senderEmail}&gt;
-          </p>
+      {searching && <LiveRefresh seconds={8} />}
+      <div>
+        <Link href="/businesses" className="back">
+          <ArrowLeft size={14} aria-hidden /> Businesses
+        </Link>
+        <header className="page-head" style={{ marginBottom: 0 }}>
+          <div>
+            <h1>{business.name}</h1>
+            <p className="lede">
+              {business.active ? "The agent is running for this business." : "The agent is paused. Nothing will be sent."} Emails go out as{" "}
+              {business.senderName} ({business.senderEmail}).
+            </p>
+          </div>
+          <form action={toggleActive.bind(null, id)}>
+            <SubmitButton
+              className={`btn ${business.active ? "btn-ghost-danger" : "btn-primary"}`}
+              pendingText={business.active ? "Pausing…" : "Resuming…"}
+            >
+              {business.active ? <Pause size={15} aria-hidden /> : <Play size={15} aria-hidden />}
+              {business.active ? "Pause agent" : "Resume agent"}
+            </SubmitButton>
+          </form>
+        </header>
+      </div>
+
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>Find new leads</h2>
+            <p className="hint" style={{ marginTop: 4 }}>
+              Claude searches the web using your ideal customer. Add a focus to narrow it down.
+            </p>
+          </div>
         </div>
-        <form action={toggleActive.bind(null, id)}>
-          <button className={`btn ${business.active ? "btn-danger" : "btn-primary"}`}>
-            {business.active ? "Pause agent" : "Resume agent"}
-          </button>
-        </form>
-      </div>
-      <Flash error={error} notice={notice} />
-
-      <div className="grid grid-stats">
-        <Stat label="Leads" value={total} href={`/leads?business=${id}`} />
-        <Stat label="Qualified" value={count("QUALIFIED", "PENDING_APPROVAL")} href={`/leads?business=${id}&status=QUALIFIED`} />
-        <Stat label="In sequence" value={count("CONTACTED")} href={`/leads?business=${id}&status=CONTACTED`} />
-        <Stat label="Replied" value={count("REPLIED", "INTERESTED")} href={`/leads?business=${id}&status=INTERESTED`} />
-        <Stat label="Meetings" value={count("MEETING_SCHEDULED")} href={`/leads?business=${id}&status=MEETING_SCHEDULED`} />
-        <Stat label="Call only" value={count("NEEDS_CALL")} href={`/leads?business=${id}&status=NEEDS_CALL`} />
-      </div>
-
-      <div className="card">
-        <h2>Find new leads</h2>
-        <form action={runDiscovery.bind(null, id)} className="row">
-          <input
-            type="text"
-            name="query"
-            placeholder='Optional focus, e.g. "private schools in Lekki" or "logistics firms hiring drivers"'
-            style={{ flex: 1, minWidth: 260 }}
-          />
-          <button className="btn btn-primary">Search the web</button>
+        <form action={runDiscovery.bind(null, id)} className="searchbar">
+          <div className="input-icon">
+            <Search size={16} aria-hidden />
+            <input type="text" name="query" placeholder="Optional focus, e.g. private schools in Lekki" aria-label="Search focus" />
+          </div>
+          <SubmitButton pendingText="Starting search…">Search the web</SubmitButton>
         </form>
         {runs.length > 0 && (
-          <div className="table-wrap" style={{ marginTop: 12 }}>
-            <table>
-              <thead>
-                <tr>
-                  <th>When</th>
-                  <th>Focus</th>
-                  <th>Status</th>
-                  <th>New leads</th>
-                </tr>
-              </thead>
-              <tbody>
-                {runs.map((r) => (
-                  <tr key={r.id}>
-                    <td>{timeAgo(r.createdAt)}</td>
-                    <td>{r.query ?? <span className="muted">ideal customer</span>}</td>
-                    <td>
-                      <Badge value={r.status} />
-                      {r.error && <div className="muted">{r.error.slice(0, 160)}</div>}
-                    </td>
-                    <td>{r.status === "DONE" ? r.leadsFound : "—"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="list" style={{ marginTop: 16 }}>
+            {runs.map((r) => (
+              <div key={r.id} className="list-item">
+                <div className="grow">
+                  <div className="title">{r.query ?? "Ideal customer search"}</div>
+                  <div className="sub">
+                    {r.status === "DONE"
+                      ? `${r.leadsFound} new lead${r.leadsFound === 1 ? "" : "s"} found`
+                      : r.status === "FAILED"
+                        ? r.error?.slice(0, 140)
+                        : r.status === "QUEUED"
+                          ? "Waiting for the agent to pick this up"
+                          : "Searching the web now"}
+                  </div>
+                </div>
+                <Badge value={r.status} />
+                <Time date={r.createdAt} />
+              </div>
+            ))}
           </div>
         )}
-      </div>
+      </section>
 
-      <BusinessForm business={business} action={updateBusiness.bind(null, id)} submitLabel="Save changes" />
-      <p className="muted">
-        <Link href="/businesses">← All businesses</Link>
-      </p>
+      <PipelineTrail counts={counts} businessId={id} />
+
+      <BusinessForm business={business} action={updateBusiness.bind(null, id)} submitLabel="Save changes" pendingLabel="Saving…" />
     </div>
   );
 }

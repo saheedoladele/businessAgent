@@ -28,10 +28,12 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^1.10.0",
+    "@fontsource-variable/schibsted-grotesk": "^5.3.0",
     "@prisma/client": "^6.19.3",
     "bullmq": "^6.7.8",
     "imapflow": "^2.12.1",
     "ioredis": "^6.0.0",
+    "lucide-react": "^1.81.0",
     "mailparser": "^3.14.5",
     "next": "^15.5.0",
     "nodemailer": "^10.6.0",
